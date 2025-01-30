@@ -9,6 +9,12 @@ SCREEN_HEIGHT = 32
 REGISTER_COUNT = 16
 STACK_SIZE = 16
 
+#RNG
+MODULUS = 256
+MULTIPLIER = 1664525
+INCREMENT = 1013904223
+seed = (MULTIPLIER * 0 + INCREMENT) % MODULUS
+
 class Chip8:
     def __init__(self):
         #Inicializa a memoria e o sistema
@@ -69,20 +75,29 @@ class Chip8:
         x = (opcode >> 8) * 0x0f
         y = (opcode >> 4) * 0x0F
 
+        #Valores que o program counter pode ser incrementado
+        STOP = 0
+        PROCEED = 2
+        SKIP = 4
+
+        #Tirando em casos especiais, incrementamos o PC em 2
+        program_counter_instruction = PROCEED
+
         if opcode == 0x00E0:
             #Clear screen
             self.screen.fill(0)
-            self.program_counter += 2
 
         elif opcode == 0x00EE:
             #Return from subroutine
             self.program_counter = self.stack[self.stack_pointer]
             self.stack_pointer -= 1
+            program_counter_instruction=STOP
 
         elif (opcode & 0xF000) == 0x1000:
             #OPCODE 1NNN
             #Jumps to address
             self.program_counter = (opcode & 0x0FFF)
+            program_counter_instruction = STOP
 
         elif (opcode & 0xF000) == 0x2000:
             #OPCODE 2NNN
@@ -92,64 +107,65 @@ class Chip8:
             self.stack_pointer += 1
             self.stack[self.stack_pointer] = self.program_counter
             self.program_counter = opcode & 0x0FFF
+            program_counter_instruction = STOP
 
         elif (opcode & 0xF000) == 0x3000:
             #OPCODE 3XNN
             #Skips the next instruction if VX equals NN (usually the next instruction is to jump a code block)
             if self.register[x] == (opcode & 0x00FF):
-                self.program_counter+=4
-            else: self.program_counter+=2
+                program_counter_instruction = SKIP
+            else: program_counter_instruction = PROCEED
 
         elif (opcode & 0xF000) == 0x4000:
             #OPCODE 4XNN
             #Skips the next instruction if VX does not equal NN (usually the next instruction is a jump to skip a code block).
             if self.register[x] != (opcode & 0x00FF):
-                self.program_counter+=4
-            else: self.program_counter+=2
+                program_counter_instruction = SKIP
+            else: program_counter_instruction = PROCEED
 
         elif (opcode & 0xF000) == 0x5000:
             #OPCODE 5XY0
             #Skips the next instruction if VX equals VY (usually the next instruction is a jump to skip a code block).
             if self.register[x] == self.register[y]:
-                self.program_counter+=4
-            else: self.program_counter+=2
+                program_counter_instruction = SKIP
+            else: program_counter_instruction = PROCEED
 
         elif (opcode & 0xF000) == 0x6000:
             #OPCODE 6XNN
             #Sets VX to NN
             self.register[x] == (opcode & 0x00FF)
-            self.program_counter+=2
+
 
         elif (opcode & 0xF000) == 0x7000:
             #OPCODE 7XNN
             #Adds NN to Vx, Carry flag not changed
             self.register[x] += (opcode & 0x00FF)
-            self.program_counter+=2
+
 
         elif (opcode & 0xF000) == 0x8000:
             if (opcode & 0x000F) == 0x0000:
                 #OPCODE 8XY0
                 #Sets VX to the value of VY.
                 self.register[x] = self.register[y]
-                self.program_counter+=2
+
 
             if (opcode & 0x000F) == 0x0001:
                 #OPCODE 8XY1
                 #Sets VX to VX or VY. (bitwise OR operation).
                 self.register[x] = (self.register[x] | self.register[y])
-                self.program_counter+=2
+
 
             if (opcode & 0x000F) == 0x0002:
                 #OPCODE 8XY2
                 #Sets VX to VX and VY (bitwise AND)
                 self.register[x] = (self.register[x] | self.register[y])
-                self.program_counter+=2
+
 
             if (opcode & 0x000F) == 0x0003:
                 #OPCODE 8XY3
                 #Sets VX to VX XOR VY
                 self.register[x] = (self.register[x] | self.register[y])
-                self.program_counter+=2
+
 
             if (opcode & 0x000F) == 0x0004:
                 #OPCODE 8XY4
@@ -159,7 +175,6 @@ class Chip8:
                     self.register[x] = self.register[x] % 0xFF
                     self.register[0xF] = 1
                 else: self.register[0xF] = 0 
-                self.program_counter+=2
 
             if (opcode & 0x000F) == 0x0005:
                 self.register[x] -= self.register[y]
@@ -167,12 +182,10 @@ class Chip8:
                     self.register[x] = 0xFF + self.register[x]
                     self.register[0xF] = 0
                 else: self.register[0xF] = 1
-                self.program_counter+=2
 
             if (opcode & 0x000F) == 0x0006:
                 self.register[0xF] = (self.register[x] & 0x0F)
                 self.register[x] = (self.register[x >> 1])
-                self.program_counter+=2
 
             if (opcode & 0x000F) == 0x0007:
                 self.register[x] = self.register[y] - self.register[x]
@@ -180,7 +193,6 @@ class Chip8:
                     self.register[x] = 0xFF + self.register[x]
                     self.register[0xF] = 0
                 else: self.register[0xF] = 1
-                self.program_counter+=2
 
             if (opcode & 0x000F) == 0x000E:
                 if self.register[x] >= 128:
@@ -188,7 +200,31 @@ class Chip8:
                 else: self.register[0xF] = 0
                 self.register[x] = self.register[x] << 1
 
-                pass
+        elif (opcode & 0xF000) == 0x9000:
+            if self.register[x] != self.register[y]:
+                program_counter_instruction = SKIP
+            else: program_counter_instruction = PROCEED
+
+        elif (opcode & 0xF000) == 0xA000:
+            self.index_register = (opcode & 0x0FFF)
+
+        elif (opcode & 0xF000) == 0xB000:
+            self.program_counter = self.register[0x0] + (opcode & 0x0FFF)
+
+        elif (opcode & 0xF000) == 0xC000:
+            self.register[x] = (seed & (opcode & 0x0FFF))
+
+        elif (opcode & 0xF000) == 0xD000:
+            #OPCODE DXYN
+            #Draws a sprite at coordinate (VX, VY) that has a width of 8 pixels and a height of N pixels.
+            # Each row of 8 pixels is read as bit-coded starting from memory location I; 
+            # I value does not change after the execution of this instruction. As described above, 
+            # VF is set to 1 if any screen pixels are flipped from set to unset when the sprite is drawn, and to 0 if that does not happen.
+            pass
+
+        self.program_counter += program_counter_instruction
+
+
 
 
 
@@ -214,6 +250,9 @@ def main():
         #Roda 10 ciclos por frame pra corrigir o timing
         for _ in range (10):
             emulator.cycle()
+        
+        #Ticks RNG seed
+        seed = (MULTIPLIER * seed + INCREMENT) % MODULUS
 
         #Update display
         pixels = np.zeros((SCREEN_HEIGHT, SCREEN_WIDTH, 3), dtype=np.uint8)
