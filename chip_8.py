@@ -73,14 +73,17 @@ class Chip8:
             #Clear screen
             self.screen.fill(0)
             self.program_counter += 2
+
         elif opcode == 0x00EE:
             #Return from subroutine
             self.program_counter = self.stack[self.stack_pointer]
             self.stack_pointer -= 1
+
         elif (opcode & 0xF000) == 0x1000:
             #OPCODE 1NNN
             #Jumps to address
             self.program_counter = (opcode & 0x0FFF)
+
         elif (opcode & 0xF000) == 0x2000:
             #OPCODE 2NNN
             #Calls subroutine at NNN
@@ -89,13 +92,106 @@ class Chip8:
             self.stack_pointer += 1
             self.stack[self.stack_pointer] = self.program_counter
             self.program_counter = opcode & 0x0FFF
+
         elif (opcode & 0xF000) == 0x3000:
             #OPCODE 3XNN
             #Skips the next instruction if VX equals NN (usually the next instruction is to jump a code block)
             if self.register[x] == (opcode & 0x00FF):
                 self.program_counter+=4
             else: self.program_counter+=2
-        elif (opcode )
+
+        elif (opcode & 0xF000) == 0x4000:
+            #OPCODE 4XNN
+            #Skips the next instruction if VX does not equal NN (usually the next instruction is a jump to skip a code block).
+            if self.register[x] != (opcode & 0x00FF):
+                self.program_counter+=4
+            else: self.program_counter+=2
+
+        elif (opcode & 0xF000) == 0x5000:
+            #OPCODE 5XY0
+            #Skips the next instruction if VX equals VY (usually the next instruction is a jump to skip a code block).
+            if self.register[x] == self.register[y]:
+                self.program_counter+=4
+            else: self.program_counter+=2
+
+        elif (opcode & 0xF000) == 0x6000:
+            #OPCODE 6XNN
+            #Sets VX to NN
+            self.register[x] == (opcode & 0x00FF)
+            self.program_counter+=2
+
+        elif (opcode & 0xF000) == 0x7000:
+            #OPCODE 7XNN
+            #Adds NN to Vx, Carry flag not changed
+            self.register[x] += (opcode & 0x00FF)
+            self.program_counter+=2
+
+        elif (opcode & 0xF000) == 0x8000:
+            if (opcode & 0x000F) == 0x0000:
+                #OPCODE 8XY0
+                #Sets VX to the value of VY.
+                self.register[x] = self.register[y]
+                self.program_counter+=2
+
+            if (opcode & 0x000F) == 0x0001:
+                #OPCODE 8XY1
+                #Sets VX to VX or VY. (bitwise OR operation).
+                self.register[x] = (self.register[x] | self.register[y])
+                self.program_counter+=2
+
+            if (opcode & 0x000F) == 0x0002:
+                #OPCODE 8XY2
+                #Sets VX to VX and VY (bitwise AND)
+                self.register[x] = (self.register[x] | self.register[y])
+                self.program_counter+=2
+
+            if (opcode & 0x000F) == 0x0003:
+                #OPCODE 8XY3
+                #Sets VX to VX XOR VY
+                self.register[x] = (self.register[x] | self.register[y])
+                self.program_counter+=2
+
+            if (opcode & 0x000F) == 0x0004:
+                #OPCODE 8XY4
+                #Adds VY to VX. VF is set to 1 when there's an overflow, and to 0 when there is not.
+                self.register[x] += self.register[y]
+                if self.register[x] > 0xFF:
+                    self.register[x] = self.register[x] % 0xFF
+                    self.register[0xF] = 1
+                else: self.register[0xF] = 0 
+                self.program_counter+=2
+
+            if (opcode & 0x000F) == 0x0005:
+                self.register[x] -= self.register[y]
+                if self.register[x] < 0:
+                    self.register[x] = 0xFF + self.register[x]
+                    self.register[0xF] = 0
+                else: self.register[0xF] = 1
+                self.program_counter+=2
+
+            if (opcode & 0x000F) == 0x0006:
+                self.register[0xF] = (self.register[x] & 0x0F)
+                self.register[x] = (self.register[x >> 1])
+                self.program_counter+=2
+
+            if (opcode & 0x000F) == 0x0007:
+                self.register[x] = self.register[y] - self.register[x]
+                if self.register[x] < 0:
+                    self.register[x] = 0xFF + self.register[x]
+                    self.register[0xF] = 0
+                else: self.register[0xF] = 1
+                self.program_counter+=2
+
+            if (opcode & 0x000F) == 0x000E:
+                if self.register[x] >= 128:
+                    self.register[0xF] = 1
+                else: self.register[0xF] = 0
+                self.register[x] = self.register[x] << 1
+
+                pass
+
+
+
 #Display Pygame Setup
 scale = 10
 window_size = (SCREEN_WIDTH * scale, SCREEN_HEIGHT * scale)
