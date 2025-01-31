@@ -15,6 +15,13 @@ MULTIPLIER = 1664525
 INCREMENT = 1013904223
 seed = (MULTIPLIER * 0 + INCREMENT) % MODULUS
 
+#Valores que o program counter pode ser incrementado
+STOP = 0
+PROCEED = 2
+SKIP = 4
+
+program_counter_instruction = PROCEED
+
 class Chip8:
     def __init__(self):
         #Inicializa a memoria e o sistema
@@ -26,7 +33,7 @@ class Chip8:
         self.stack_pointer = -1
         self.delay_timer = 0
         self.sound_timer = 0
-        self.screen = np.zeros((SCREEN_HEIGHT, SCREEN_WIDTH), dtype=np.uint8)
+        self.screen = np.zeros((SCREEN_WIDTH, SCREEN_HEIGHT, 3), dtype=np.uint8)
         self.keys = [0] * 16
 
         #Inicializa fontset
@@ -58,8 +65,8 @@ class Chip8:
     def cycle(self):
         #Fetch opcode
         opcode = (self.memory[self.program_counter] << 8 | self.memory[self.program_counter + 1])
+        self.program_counter += program_counter_instruction
 
-            
         #Decodifica e opera o opcode
         self.execute_opcode(opcode)
 
@@ -72,16 +79,11 @@ class Chip8:
 
     def execute_opcode(self, opcode):
         #Extrair nibbles do opcode
-        x = (opcode >> 8) * 0x0f
-        y = (opcode >> 4) * 0x0F
-
-        #Valores que o program counter pode ser incrementado
-        STOP = 0
-        PROCEED = 2
-        SKIP = 4
+        x = (opcode & 0x0F00) >> 8
+        y = (opcode & 0x00F0) >> 4
 
         #Tirando em casos especiais, incrementamos o PC em 2
-        program_counter_instruction = PROCEED
+        global program_counter_instruction
 
         if opcode == 0x00E0:
             #Clear screen
@@ -91,7 +93,7 @@ class Chip8:
             #Return from subroutine
             self.program_counter = self.stack[self.stack_pointer]
             self.stack_pointer -= 1
-            program_counter_instruction=STOP
+            program_counter_instruction = STOP
 
         elif (opcode & 0xF000) == 0x1000:
             #OPCODE 1NNN
@@ -133,13 +135,16 @@ class Chip8:
         elif (opcode & 0xF000) == 0x6000:
             #OPCODE 6XNN
             #Sets VX to NN
-            self.register[x] == (opcode & 0x00FF)
+            self.register[x] = (opcode & 0x00FF)
+            
 
 
         elif (opcode & 0xF000) == 0x7000:
             #OPCODE 7XNN
             #Adds NN to Vx, Carry flag not changed
             self.register[x] += (opcode & 0x00FF)
+            if self.register[x] > 255:
+                self.register[x] %= 255
 
 
         elif (opcode & 0xF000) == 0x8000:
@@ -216,13 +221,26 @@ class Chip8:
 
         elif (opcode & 0xF000) == 0xD000:
             #OPCODE DXYN
-            #Draws a sprite at coordinate (VX, VY) that has a width of 8 pixels and a height of N pixels.
-            # Each row of 8 pixels is read as bit-coded starting from memory location I; 
-            # I value does not change after the execution of this instruction. As described above, 
-            # VF is set to 1 if any screen pixels are flipped from set to unset when the sprite is drawn, and to 0 if that does not happen.
-            pass
+            self.register[0xF] = 0
 
-        self.program_counter += program_counter_instruction
+            for height in range ((opcode & 0x000F)):
+                pixel = self.memory[self.index_register + height]
+
+                for width in range (8):
+                    if (pixel & (0x80 >> width)):
+                        x_pos = (self.register[x] + width) & (SCREEN_WIDTH - 1)
+                        y_pos = (self.register[y] + height) & (SCREEN_HEIGHT - 1)
+
+                        if np.any(self.screen[x_pos, y_pos] != 0):
+                            self.register[0xF] = 1
+
+                        self.screen[x_pos, y_pos] ^=  255
+        
+        elif(opcode & 0xF000) == 0xF000:
+            if (opcode & 0x00FF) == 0x0033:
+                self.memory[self.index_register] = self.register[x] / 100
+                self.memory[self.index_register + 1] = (self.register[x] / 10) % 10
+                self.memory[self.index_register + 2] = (self.register[x] % 100) % 10
 
 
 
@@ -237,32 +255,41 @@ def main():
     screen = pygame.display.set_mode(window_size)
     pygame.display.set_caption("Claus-8")
     clock = pygame.time.Clock()
-    surface = pygame.Surface((SCREEN_HEIGHT, SCREEN_WIDTH))
+    surface = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
 
     emulator = Chip8()
+
+    with open('IBMlogo.ch8', 'rb') as rom_file:
+        rom_data = rom_file.read()
+        for index, val in enumerate(rom_data):
+            emulator.memory[0x200 + index] = val
+
 
     running = True
     while running:
         for event in pygame.event.get():
             if event.type == QUIT:
                 running = False
+
         
         #Roda 10 ciclos por frame pra corrigir o timing
-        for _ in range (10):
+        for _ in range(10):
             emulator.cycle()
         
         #Ticks RNG seed
+        global seed
         seed = (MULTIPLIER * seed + INCREMENT) % MODULUS
 
         #Update display
-        pixels = np.zeros((SCREEN_HEIGHT, SCREEN_WIDTH, 3), dtype=np.uint8)
-        pixels[emulator.screen == 1] = [255, 255, 255]
+        pixels = emulator.screen
         pygame.surfarray.blit_array(surface, pixels)
         scaled_surface = pygame.transform.scale(surface, window_size)
         screen.blit(scaled_surface, (0,0))
-        pygame.display.flip()
+        pygame.display.update()
 
         clock.tick(60)
+
+
     pygame.quit()
 
 if __name__ == "__main__":
