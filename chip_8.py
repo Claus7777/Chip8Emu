@@ -234,8 +234,35 @@ class Chip8:
                         if np.any(self.screen[x_pos, y_pos] != 0):
                             self.register[0xF] = 1
 
-                        self.screen[x_pos, y_pos] ^=  255
+                        self.screen[x_pos, y_pos] ^=  150
         
+        elif (opcode & 0xF000) == 0xE000:
+            if (opcode & 0x00FF) == 0x009E:
+                pass
+            if (opcode & 0x00FF) == 0x00A1:
+                pass
+            pass
+
+        elif (opcode & 0xF000) == 0xF000:
+            if (opcode & 0x00FF) == 0x0007:
+                pass
+            if (opcode & 0x000F) == 0x000A:
+                pass
+            if (opcode & 0x00FF) == 0x0015:
+                pass
+            if (opcode & 0x00FF) == 0x0018:
+                pass
+            if (opcode & 0x00FF) == 0x001E:
+                pass
+            if (opcode & 0x00FF) == 0x0029:
+                pass
+            if (opcode & 0x00FF) == 0x0033:
+                pass
+            if (opcode & 0x00FF) == 0x0055:
+                pass
+            if (opcode & 0x00FF) == 0x0065:
+                pass
+
         elif(opcode & 0xF000) == 0xF000:
             if (opcode & 0x00FF) == 0x0033:
                 self.memory[self.index_register] = self.register[x] / 100
